@@ -18,6 +18,7 @@ import torchvision.transforms as transforms
 import torchvision
 import cv2
 import numpy as np
+import random
 
 import sys
 sys.path.append("../lib")
@@ -240,84 +241,104 @@ def main():
     frame_width = int(vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     outcap = cv2.VideoWriter('{}/{}_pose.avi'.format(args.outputDir, os.path.splitext(os.path.basename(args.videoFile))[0]),
-                             cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), int(skip_frame_cnt), (frame_width, frame_height))
+                             cv2.VideoWriter_fourcc('M', 'P', 'E', 'G'), fps, (frame_width, frame_height))
 
     count = 0
-    while vidcap.isOpened():
-        total_now = time.time()
-        ret, image_bgr = vidcap.read()
-        count += 1
-
-        if not ret:
-            continue
-
-        if count % skip_frame_cnt != 0:
-            continue
-
-        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-
-        # Clone 2 image for person detection and pose estimation
-        if cfg.DATASET.COLOR_RGB:
-            image_per = image_rgb.copy()
-            image_pose = image_rgb.copy()
-        else:
-            image_per = image_bgr.copy()
-            image_pose = image_bgr.copy()
-
-        # Clone 1 image for debugging purpose
-        image_debug = image_bgr.copy()
-
-        # object detection box
-        now = time.time()
-        pred_boxes = get_person_detection_boxes(box_model, image_per, threshold=0.9)
-        then = time.time()
-        print("Find person bbox in: {} sec".format(then - now))
-
-        # Can not find people. Move to next frame
-        if not pred_boxes:
-            count += 1
-            continue
-
-        if args.writeBoxFrames:
-            for box in pred_boxes:
-                cv2.rectangle(image_debug, box[0], box[1], color=(0, 255, 0),
-                              thickness=3)  # Draw Rectangle with the coordinates
-
-        # pose estimation : for multiple people
-        centers = []
-        scales = []
-        for box in pred_boxes:
-            center, scale = box_to_center_scale(box, cfg.MODEL.IMAGE_SIZE[0], cfg.MODEL.IMAGE_SIZE[1])
-            centers.append(center)
-            scales.append(scale)
-
-        now = time.time()
-        pose_preds = get_pose_estimation_prediction(pose_model, image_pose, centers, scales, transform=pose_transform)
-        then = time.time()
-        print("Find person pose in: {} sec".format(then - now))
-
-        new_csv_row = []
-        for coords in pose_preds:
-            # Draw each point on image
-            for coord in coords:
-                x_coord, y_coord = int(coord[0]), int(coord[1])
-                cv2.circle(image_debug, (x_coord, y_coord), 4, (255, 0, 0), 2)
-                new_csv_row.extend([x_coord, y_coord])
-
-        total_then = time.time()
-
-        text = "{:03.2f} sec".format(total_then - total_now)
-        cv2.putText(image_debug, text, (100, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                            1, (0, 0, 255), 2, cv2.LINE_AA)
-
-        cv2.imshow("pos", image_debug)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-        csv_output_rows.append(new_csv_row)
-        img_file = os.path.join(pose_dir, 'pose_{:08d}.jpg'.format(count))
-        cv2.imwrite(img_file, image_debug)
-        outcap.write(image_debug)
+    try:
+      while vidcap.isOpened():
+          total_now = time.time()
+          
+          ret, image_bgr = vidcap.read()
+          
+          count += 1
+  
+          if not ret:
+              continue
+  
+          if count % skip_frame_cnt != 0:
+              continue
+  
+          image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+  
+          # Clone 2 image for person detection and pose estimation
+          if cfg.DATASET.COLOR_RGB:
+              image_per = image_rgb.copy()
+              image_pose = image_rgb.copy()
+          else:
+              image_per = image_bgr.copy()
+              image_pose = image_bgr.copy()
+  
+          # Clone 1 image for debugging purpose
+          image_debug = image_bgr.copy()
+  
+          # object detection box
+          now = time.time()
+          pred_boxes = get_person_detection_boxes(box_model, image_per, threshold=0.9)
+          then = time.time()
+          print("Find person bbox in: {} sec".format(then - now))
+  
+          # Can not find people. Move to next frame
+          if not pred_boxes:
+              count += 1
+              continue
+  
+          if args.writeBoxFrames:
+              for box in pred_boxes:
+                  cv2.rectangle(image_debug, box[0], box[1], color=(0, 255, 0),
+                                thickness=3)  # Draw Rectangle with the coordinates
+  
+          # pose estimation : for multiple people
+          centers = []
+          scales = []
+          for box in pred_boxes:
+              center, scale = box_to_center_scale(box, cfg.MODEL.IMAGE_SIZE[0], cfg.MODEL.IMAGE_SIZE[1])
+              centers.append(center)
+              scales.append(scale)
+  
+          now = time.time()
+          pose_preds = get_pose_estimation_prediction(pose_model, image_pose, centers, scales, transform=pose_transform)
+          then = time.time()
+          print("Find person pose in: {} sec".format(then - now))
+  
+          new_csv_row = []
+          
+          for coords in pose_preds:
+              # Draw each point on image
+              color = [random.randint(0,255) for i in range(3)]
+              cv2.line(image_debug, coords[0],coord[1], color, 2) 
+              cv2.line(image_debug, coords[1],coord[3], color, 2)
+              cv2.line(image_debug, coords[5],coord[7], color, 2)
+              cv2.line(image_debug, coords[9],coord[7], color, 2)
+              cv2.line(image_debug, coords[11],coord[13], color, 2)
+              cv2.line(image_debug, coords[13],coord[15], color, 2)
+              
+              cv2.line(image_debug, coords[0],coord[2], color, 2) 
+              cv2.line(image_debug, coords[2],coord[4], color, 2)
+              cv2.line(image_debug, coords[6],coord[8], color, 2)
+              cv2.line(image_debug, coords[10],coord[12], color, 2)
+              cv2.line(image_debug, coords[12],coord[14], color, 2)
+              cv2.line(image_debug, coords[14],coord[16], color, 2)
+              for coord in coords:
+                  x_coord, y_coord = int(coord[0]), int(coord[1])
+                  cv2.circle(image_debug, (x_coord, y_coord), 4, color, 2)
+                  new_csv_row.extend([x_coord, y_coord])
+  
+          total_then = time.time()
+  
+          text = "{:03.2f} sec".format(total_then - total_now)
+          cv2.putText(image_debug, text, (100, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                              1, (0, 0, 255), 2, cv2.LINE_AA)
+  
+          #cv2.imshow("pos", image_debug)
+          #if cv2.waitKey(1) & 0xFF == ord('q'):
+          #    break
+  
+          csv_output_rows.append(new_csv_row)
+          img_file = os.path.join(pose_dir, 'pose_{:08d}.jpg'.format(count))
+          cv2.imwrite(img_file, image_debug)
+          outcap.write(image_debug)
+    except KeyboardInterrupt:
+      pass
 
 
     # write csv
